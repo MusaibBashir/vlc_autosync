@@ -37,7 +37,7 @@ vlc_module_begin()
     set_subcategory(SUBCAT_VIDEO_SUBPIC)
     set_capability("sub_filter", 0)
     set_callbacks(SubOpen, SubClose)
-    add_shortcut("autosync")
+    add_shortcut("autosync_sub")
 
     add_submodule()
     set_shortname("AutoSync Audio")
@@ -46,7 +46,7 @@ vlc_module_begin()
     set_subcategory(SUBCAT_AUDIO_AFILTER)
     set_capability("audio filter", 0)
     set_callbacks(AudioOpen, AudioClose)
-    add_shortcut("autosync")
+    add_shortcut("autosync_audio")
 vlc_module_end()
 
 /* ── Shared context ───────────────────────────────────────────────────────── */
