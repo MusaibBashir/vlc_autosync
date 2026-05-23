@@ -35,7 +35,7 @@ vlc_module_begin()
     set_description("Auto Subtitle Sync (Sub Filter)")
     set_category(CAT_VIDEO)
     set_subcategory(SUBCAT_VIDEO_SUBPIC)
-    set_capability("sub_filter", 0)
+    set_capability("sub filter", 0)
     set_callbacks(SubOpen, SubClose)
     add_shortcut("autosync_sub")
 
