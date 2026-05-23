@@ -3,29 +3,26 @@ name: Build VLC AutoSync Plugin
 on:
   push:
     branches: [main]
-    tags:     ["v*"]          # triggers the release step
+    tags:     ["v*"]
   pull_request:
     branches: [main]
 
 jobs:
   build:
-    runs-on: ubuntu-latest   # VLC dev headers are easiest on Ubuntu
+    runs-on: ubuntu-latest
 
     steps:
-      # ── 1. Checkout ────────────────────────────────────────────────────
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          submodules: recursive   # pulls kiss_fft if it's a submodule
+          submodules: recursive
 
-      # ── 2. Cache kiss_fft build ────────────────────────────────────────
       - name: Cache kiss_fft
         uses: actions/cache@v4
         with:
           path: kiss_fft
           key: kissfft-${{ hashFiles('kiss_fft/**') }}
 
-      # ── 3. Install system dependencies ────────────────────────────────
       - name: Install dependencies
         run: |
           sudo apt-get update -qq
@@ -36,24 +33,27 @@ jobs:
             libvlccore-dev \
             vlc-plugin-base
 
-      # ── 4. CMake configure ─────────────────────────────────────────────
+      # Confirm the headers and .pc file are present before cmake runs
+      - name: Verify VLC dev packages
+        run: |
+          pkg-config --modversion libvlc
+          find /usr/include -name "vlc_common.h" | head -3
+          find /usr/lib -name "libvlccore.so*"   | head -3
+
       - name: Configure
         run: |
           cmake -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DVLC_PLUGIN_DIR=${{ github.workspace }}/dist
 
-      # ── 5. Build ───────────────────────────────────────────────────────
       - name: Build
         run: cmake --build build --config Release --parallel
 
-      # ── 6. Verify the .so was produced ────────────────────────────────
       - name: Verify output
         run: |
           ls -lh build/libautosync_plugin.so
           file build/libautosync_plugin.so
 
-      # ── 7. Upload artifact (every build) ──────────────────────────────
       - name: Upload plugin artifact
         uses: actions/upload-artifact@v4
         with:
@@ -61,7 +61,6 @@ jobs:
           path: build/libautosync_plugin.so
           retention-days: 30
 
-      # ── 8. Create GitHub release (tag pushes only) ────────────────────
       - name: Release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
