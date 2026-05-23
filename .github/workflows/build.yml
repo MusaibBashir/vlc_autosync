@@ -40,15 +40,16 @@ jobs:
 
       - name: Compile Windows DLL
         run: |
-          # Notice we added -Ivlc-3.0.20/include so it finds vlc_common.h
           x86_64-w64-mingw32-gcc -shared -o libautosync_plugin.dll \
             autosync.c autosync_fft.c kiss_fft/kiss_fft.c \
             -I./kiss_fft \
             -Ivlc-3.0.20/include \
-            -Lvlc-3.0.20/sdk/lib \
-            -lvlccore -lvlc -lm \
             -O3 -ffast-math -funroll-loops \
-            -D__PLUGIN__ -DMODULE_STRING=\"autosync\"
+            -D__PLUGIN__ -DMODULE_STRING=\"autosync\" \
+            -D_WIN32_WINNT=0x0601 \
+            vlc-3.0.20/sdk/lib/libvlccore.lib \
+            vlc-3.0.20/sdk/lib/libvlc.lib \
+            -lm -lws2_32
             
       - name: Verify Output
         run: |
