@@ -41,14 +41,15 @@ jobs:
       - name: Compile Windows DLL
         run: |
           x86_64-w64-mingw32-gcc -shared -o libautosync_plugin.dll \
+            -include winsock2.h \
             autosync.c autosync_fft.c kiss_fft/kiss_fft.c \
             -I./kiss_fft \
             -Ivlc-3.0.20/include \
             -O3 -ffast-math -funroll-loops \
             -D__PLUGIN__ -DMODULE_STRING=\"autosync\" \
             -D_WIN32_WINNT=0x0601 \
-            vlc-3.0.20/sdk/lib/libvlccore.lib \
-            vlc-3.0.20/sdk/lib/libvlc.lib \
+            vlc-3.0.20/libvlccore.dll \
+            vlc-3.0.20/libvlc.dll \
             -lm -lws2_32
             
       - name: Verify Output
