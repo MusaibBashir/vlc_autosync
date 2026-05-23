@@ -33,12 +33,18 @@ jobs:
             libvlccore-dev \
             vlc-plugin-base
 
-      # Confirm the headers and .pc file are present before cmake runs
+      # Print exactly what got installed so future failures are easier to diagnose
       - name: Verify VLC dev packages
         run: |
+          echo "=== libvlc pkg-config ==="
           pkg-config --modversion libvlc
-          find /usr/include -name "vlc_common.h" | head -3
-          find /usr/lib -name "libvlccore.so*"   | head -3
+          pkg-config --cflags libvlc
+          echo "=== vlc_common.h location ==="
+          find /usr/include -name "vlc_common.h"
+          echo "=== libvlccore.so location ==="
+          find /usr/lib -name "libvlccore.so*"
+          echo "=== kiss_fft files ==="
+          ls kiss_fft/
 
       - name: Configure
         run: |

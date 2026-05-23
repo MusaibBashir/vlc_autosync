@@ -16,60 +16,70 @@ add_compile_options(
 
 # ── Find VLC headers ─────────────────────────────────────────────────────────
 #
-# Ubuntu ships libvlc-dev (public C API) and libvlccore-dev (internal plugin
-# API, needed for vlc_common.h / vlc_plugin.h / vlc_filter.h etc.).
-# Only "libvlc" has a pkg-config .pc file; "vlccore" does NOT — pkg_check_modules
-# with REQUIRED vlccore therefore always fails on Ubuntu.
+# Ubuntu package layout:
+#   libvlc-dev     → /usr/include/vlc/vlc.h  (public API, has .pc file)
+#   libvlccore-dev → /usr/include/vlc/plugins/vlc_common.h  (plugin API, NO .pc file)
 #
-# Strategy:
-#   1. Use pkg-config for libvlc  → gives us -I and -L for the public API.
-#   2. Find vlc_common.h manually → tells us where the plugin headers live.
-#   3. Link only against libvlc (public) + libvlccore (found via find_library).
-#      Plugin modules are loaded by VLC at runtime; we don't need to link the
-#      full vlccore static archive.
+# Our code does  #include <vlc_common.h>  (no path prefix), so we need
+# -I/usr/include/vlc/plugins  on the compiler command line.
 #
 find_package(PkgConfig REQUIRED)
-pkg_check_modules(LIBVLC REQUIRED libvlc)   # libvlc only — always present
+pkg_check_modules(LIBVLC REQUIRED libvlc)
 
-# Find the plugin-API headers (vlc_common.h lives one level above vlc/)
-find_path(VLC_PLUGIN_INCLUDE_DIR
-    NAMES vlc/vlc.h
-    HINTS
-        ${LIBVLC_INCLUDE_DIRS}
-        /usr/include
-        /usr/local/include
+# pkg-config gives us -I/usr/include; plugin headers are one level deeper.
+# Build a list of candidate paths from whatever pkg-config reported.
+set(_VLC_PLUGIN_HEADER_HINTS)
+foreach(_idir IN LISTS LIBVLC_INCLUDE_DIRS)
+    list(APPEND _VLC_PLUGIN_HEADER_HINTS
+        "${_idir}/vlc/plugins"
+        "${_idir}/vlc"
+        "${_idir}"
+    )
+endforeach()
+# Also try the standard hard paths in case pkg-config gives nothing.
+list(APPEND _VLC_PLUGIN_HEADER_HINTS
+    /usr/include/vlc/plugins
+    /usr/local/include/vlc/plugins
 )
+
+find_path(VLC_PLUGIN_INCLUDE_DIR
+    NAMES vlc_common.h
+    HINTS ${_VLC_PLUGIN_HEADER_HINTS}
+    NO_DEFAULT_PATH
+)
+
 if(NOT VLC_PLUGIN_INCLUDE_DIR)
     message(FATAL_ERROR
-        "Could not find vlc/vlc.h. Install libvlc-dev and libvlccore-dev:\n"
-        "  sudo apt-get install libvlc-dev libvlccore-dev")
+        "Cannot find vlc_common.h.\n"
+        "Make sure libvlccore-dev is installed:\n"
+        "  sudo apt-get install libvlc-dev libvlccore-dev\n"
+        "Searched: ${_VLC_PLUGIN_HEADER_HINTS}")
 endif()
+message(STATUS "VLC plugin headers : ${VLC_PLUGIN_INCLUDE_DIR}")
 
-# The internal plugin headers (vlc_common.h, vlc_plugin.h, vlc_filter.h …)
-# sit in the same include tree — just add the parent so #include <vlc_common.h>
-# resolves correctly.
-set(VLC_INCLUDE_DIRS "${VLC_PLUGIN_INCLUDE_DIR}")
-
-# Find libvlccore.so (needed at link time for vlc_object_*, msg_Info, etc.)
+# Find libvlccore.so for linking (no .pc file, use find_library).
 find_library(LIBVLCCORE_LIB
     NAMES vlccore
-    HINTS ${LIBVLC_LIBRARY_DIRS} /usr/lib /usr/lib/x86_64-linux-gnu
+    HINTS ${LIBVLC_LIBRARY_DIRS}
+          /usr/lib /usr/lib/x86_64-linux-gnu /usr/local/lib
 )
 if(NOT LIBVLCCORE_LIB)
     message(FATAL_ERROR
-        "Could not find libvlccore.so. Install libvlccore-dev:\n"
-        "  sudo apt-get install libvlccore-dev")
+        "Cannot find libvlccore.so.\n"
+        "Install libvlccore-dev:  sudo apt-get install libvlccore-dev")
 endif()
-
-message(STATUS "VLC include dir : ${VLC_INCLUDE_DIRS}")
-message(STATUS "libvlc          : ${LIBVLC_LIBRARIES}")
-message(STATUS "libvlccore      : ${LIBVLCCORE_LIB}")
+message(STATUS "libvlc             : ${LIBVLC_LIBRARIES}")
+message(STATUS "libvlccore         : ${LIBVLCCORE_LIB}")
 
 # ── kiss_fft (bundled) ───────────────────────────────────────────────────────
 add_library(kissfft STATIC
     kiss_fft/kiss_fft.c
 )
-target_include_directories(kissfft PUBLIC kiss_fft)
+# kiss_fft.c includes "_kiss_fft_guts.h" with a relative path, so the include
+# dir must be the folder that contains both files — i.e. kiss_fft/ itself.
+target_include_directories(kissfft PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/kiss_fft
+)
 target_compile_options(kissfft PRIVATE
     $<$<CONFIG:Release>:-O2>
     $<$<CONFIG:Release>:-ffast-math>
@@ -83,19 +93,18 @@ add_library(autosync MODULE
 )
 
 target_include_directories(autosync PRIVATE
-    ${VLC_INCLUDE_DIRS}
-    kiss_fft
+    ${VLC_PLUGIN_INCLUDE_DIR}   # /usr/include/vlc/plugins  → vlc_common.h etc.
+    ${LIBVLC_INCLUDE_DIRS}      # /usr/include              → vlc/vlc.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/kiss_fft
 )
 
 target_link_libraries(autosync PRIVATE
     kissfft
-    ${LIBVLC_LIBRARIES}     # -lvlc
-    ${LIBVLCCORE_LIB}       # -lvlccore  (full path from find_library)
-    m                       # libm for sqrt()
+    ${LIBVLC_LIBRARIES}
+    ${LIBVLCCORE_LIB}
+    m
 )
 
-# Suppress the default "lib" prefix — we add it explicitly so the name is
-# exactly libautosync_plugin.so as VLC expects.
 set_target_properties(autosync PROPERTIES
     PREFIX      "lib"
     SUFFIX      "_plugin.so"
@@ -103,8 +112,6 @@ set_target_properties(autosync PROPERTIES
 )
 
 # ── Install destination ───────────────────────────────────────────────────────
-# Accept -DVLC_PLUGIN_DIR=... from the command line (CI passes it).
-# If not given, derive from pkg-config libdir, then fall back to a hard path.
 if(NOT DEFINED VLC_PLUGIN_DIR)
     if(LIBVLC_LIBDIR)
         set(VLC_PLUGIN_DIR "${LIBVLC_LIBDIR}/vlc/plugins")
@@ -114,4 +121,4 @@ if(NOT DEFINED VLC_PLUGIN_DIR)
 endif()
 
 install(TARGETS autosync DESTINATION "${VLC_PLUGIN_DIR}/video_filter")
-message(STATUS "Plugin install dir: ${VLC_PLUGIN_DIR}/video_filter")
+message(STATUS "Plugin install dir : ${VLC_PLUGIN_DIR}/video_filter")
