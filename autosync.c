@@ -171,8 +171,14 @@ static block_t *AudioFilter(filter_t *p_tap, block_t *p_block) {
 }
 
 static int AudioOpen(vlc_object_t *obj) {
+/* ADD THIS LINE FIRST */
+    msg_Err(obj, "[AutoSync DEBUG] ---> AUDIO FILTER ATTEMPTING TO OPEN <---");
+
     filter_t *p_tap = (filter_t *)obj;
-    if (p_tap->fmt_in.audio.i_format != VLC_CODEC_FL32) return VLC_EGENERIC;
+    if (p_tap->fmt_in.audio.i_format != VLC_CODEC_FL32) {
+        msg_Err(obj, "[AutoSync DEBUG] Audio format rejected! Expected FL32.");
+        return VLC_EGENERIC;
+    }
 
     filter_sys_t *sys = calloc(1, sizeof(*sys));
     if (!sys) return VLC_ENOMEM;
@@ -181,6 +187,7 @@ static int AudioOpen(vlc_object_t *obj) {
     p_tap->p_sys = sys;
     p_tap->pf_audio_filter = AudioFilter;
     
+    msg_Err(obj, "[AutoSync DEBUG] ---> AUDIO FILTER SUCCESSFULLY LOADED <---");
     return VLC_SUCCESS;
 }
 
@@ -231,6 +238,9 @@ static subpicture_t *SubFilter(filter_t *p_filter, subpicture_t *p_spu) {
 }
 
 static int SubOpen(vlc_object_t *obj) {
+/* ADD THIS LINE FIRST */
+    msg_Err(obj, "[AutoSync DEBUG] ---> SUB FILTER ATTEMPTING TO OPEN <---");
+
     filter_t *p_filter = (filter_t *)obj;
 
     filter_sys_t *sys = calloc(1, sizeof(*sys));
@@ -240,7 +250,7 @@ static int SubOpen(vlc_object_t *obj) {
     p_filter->p_sys = sys;
     p_filter->pf_sub_filter = SubFilter;
 
-    msg_Info(p_filter, "[AutoSync] Loaded Sub Filter.");
+    msg_Err(obj, "[AutoSync DEBUG] ---> SUB FILTER SUCCESSFULLY LOADED <---");
     return VLC_SUCCESS;
 }
 
