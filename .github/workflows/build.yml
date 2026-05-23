@@ -19,29 +19,32 @@ jobs:
 
       - name: Patch kiss_fft missing header
         run: |
-          echo "Patching _kiss_fft_guts.h to remove missing log header..."
-          sed -i 's/#include "kiss_fft_log.h"/\/\/ removed missing header/' kiss_fft/_kiss_fft_guts.h
+          echo "Patching _kiss_fft_guts.h to replace missing log header..."
+          # Replaces the missing include with a fallback macro so it compiles
+          sed -i 's/#include "kiss_fft_log.h"/#define KISS_FFT_ERROR(msg) exit(1)/' kiss_fft/_kiss_fft_guts.h
 
       - name: Install MinGW Cross-Compiler
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y gcc-mingw-w64-x86-64 unzip wget
+          sudo apt-get install -y gcc-mingw-w64-x86-64 unzip wget xz-utils
 
-      - name: Download Windows VLC 3.0.20 SDK
+      - name: Download VLC Source & Windows SDK
         run: |
-          echo "Downloading official Windows VLC binaries..."
+          echo "Downloading Windows SDK for linking libraries..."
           wget -q https://get.videolan.org/vlc/3.0.20/win64/vlc-3.0.20-win64.zip
           unzip -q vlc-3.0.20-win64.zip
-          echo "VLC SDK Extracted."
+          
+          echo "Downloading VLC Source for plugin headers..."
+          wget -q https://get.videolan.org/vlc/3.0.20/vlc-3.0.20.tar.xz
+          tar -xf vlc-3.0.20.tar.xz
 
       - name: Compile Windows DLL
-        # Bypassing CMake entirely for a direct, clean cross-compilation
         run: |
+          # Notice we added -Ivlc-3.0.20/include so it finds vlc_common.h
           x86_64-w64-mingw32-gcc -shared -o libautosync_plugin.dll \
             autosync.c autosync_fft.c kiss_fft/kiss_fft.c \
             -I./kiss_fft \
-            -Ivlc-3.0.20/sdk/include \
-            -Ivlc-3.0.20/sdk/include/vlc/plugins \
+            -Ivlc-3.0.20/include \
             -Lvlc-3.0.20/sdk/lib \
             -lvlccore -lvlc -lm \
             -O3 -ffast-math -funroll-loops \
