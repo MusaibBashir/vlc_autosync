@@ -1,4 +1,4 @@
-name: Build VLC AutoSync Plugin
+name: Build VLC AutoSync Plugin (Windows)
 
 on:
   push:
@@ -8,7 +8,7 @@ on:
     branches: [main]
 
 jobs:
-  build:
+  build-windows:
     runs-on: ubuntu-latest
 
     steps:
@@ -17,59 +17,44 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Cache kiss_fft
-        uses: actions/cache@v4
-        with:
-          path: kiss_fft
-          key: kissfft-${{ hashFiles('kiss_fft/**') }}
+      - name: Patch kiss_fft missing header
+        run: |
+          echo "Patching _kiss_fft_guts.h to remove missing log header..."
+          sed -i 's/#include "kiss_fft_log.h"/\/\/ removed missing header/' kiss_fft/_kiss_fft_guts.h
 
-      - name: Install dependencies
+      - name: Install MinGW Cross-Compiler
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y \
-            cmake ninja-build \
-            pkg-config \
-            libvlc-dev \
-            libvlccore-dev \
-            vlc-plugin-base
+          sudo apt-get install -y gcc-mingw-w64-x86-64 unzip wget
 
-      # Print exactly what got installed so future failures are easier to diagnose
-      - name: Verify VLC dev packages
+      - name: Download Windows VLC 3.0.20 SDK
         run: |
-          echo "=== libvlc pkg-config ==="
-          pkg-config --modversion libvlc
-          pkg-config --cflags libvlc
-          echo "=== vlc_common.h location ==="
-          find /usr/include -name "vlc_common.h"
-          echo "=== libvlccore.so location ==="
-          find /usr/lib -name "libvlccore.so*"
-          echo "=== kiss_fft files ==="
-          ls kiss_fft/
+          echo "Downloading official Windows VLC binaries..."
+          wget -q https://get.videolan.org/vlc/3.0.20/win64/vlc-3.0.20-win64.zip
+          unzip -q vlc-3.0.20-win64.zip
+          echo "VLC SDK Extracted."
 
-      - name: Configure
+      - name: Compile Windows DLL
+        # Bypassing CMake entirely for a direct, clean cross-compilation
         run: |
-          cmake -B build -G Ninja \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DVLC_PLUGIN_DIR=${{ github.workspace }}/dist
-
-      - name: Build
-        run: cmake --build build --config Release --parallel
-
-      - name: Verify output
+          x86_64-w64-mingw32-gcc -shared -o libautosync_plugin.dll \
+            autosync.c autosync_fft.c kiss_fft/kiss_fft.c \
+            -I./kiss_fft \
+            -Ivlc-3.0.20/sdk/include \
+            -Ivlc-3.0.20/sdk/include/vlc/plugins \
+            -Lvlc-3.0.20/sdk/lib \
+            -lvlccore -lvlc -lm \
+            -O3 -ffast-math -funroll-loops \
+            -D__PLUGIN__ -DMODULE_STRING=\"autosync\"
+            
+      - name: Verify Output
         run: |
-          ls -lh build/libautosync_plugin.so
-          file build/libautosync_plugin.so
+          ls -lh libautosync_plugin.dll
+          file libautosync_plugin.dll
 
-      - name: Upload plugin artifact
+      - name: Upload Windows Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: libautosync_plugin-${{ github.sha }}
-          path: build/libautosync_plugin.so
+          name: libautosync_plugin-windows-${{ github.sha }}
+          path: libautosync_plugin.dll
           retention-days: 30
-
-      - name: Release
-        if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v2
-        with:
-          files: build/libautosync_plugin.so
-          generate_release_notes: true
