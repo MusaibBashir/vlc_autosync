@@ -50,7 +50,7 @@ jobs:
             -D_WIN32_WINNT=0x0601 \
             vlc-3.0.20/libvlccore.dll \
             vlc-3.0.20/libvlc.dll \
-            -lm -lws2_32
+            -lm -lws2_32 -static -static-libgcc -lpthread
             
       - name: Verify Output
         run: |
