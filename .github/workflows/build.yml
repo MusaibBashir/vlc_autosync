@@ -19,22 +19,17 @@ jobs:
 
       - name: Patch kiss_fft missing header
         run: |
-          echo "Patching _kiss_fft_guts.h to replace missing log header..."
-          # Replaces the missing include with a fallback macro so it compiles
           sed -i 's/#include "kiss_fft_log.h"/#define KISS_FFT_ERROR(msg) exit(1)/' kiss_fft/_kiss_fft_guts.h
 
-      - name: Install MinGW Cross-Compiler
+      - name: Install MinGW cross-compiler
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y gcc-mingw-w64-x86-64 unzip wget xz-utils
 
-      - name: Download VLC Source & Windows SDK
+      - name: Download VLC Windows SDK and source headers
         run: |
-          echo "Downloading Windows SDK for linking libraries..."
           wget -q https://get.videolan.org/vlc/3.0.20/win64/vlc-3.0.20-win64.zip
           unzip -q vlc-3.0.20-win64.zip
-          
-          echo "Downloading VLC Source for plugin headers..."
           wget -q https://get.videolan.org/vlc/3.0.20/vlc-3.0.20.tar.xz
           tar -xf vlc-3.0.20.tar.xz
 
@@ -45,21 +40,40 @@ jobs:
             autosync.c autosync_fft.c kiss_fft/kiss_fft.c \
             -I./kiss_fft \
             -Ivlc-3.0.20/include \
-            -O3 -ffast-math -funroll-loops \
+            -O2 -ffast-math -funroll-loops \
             -D__PLUGIN__ -DMODULE_STRING=\"autosync\" \
             -D_WIN32_WINNT=0x0601 \
             vlc-3.0.20/libvlccore.dll \
             vlc-3.0.20/libvlc.dll \
             -lm -lws2_32 -static -static-libgcc -lpthread
-            
-      - name: Verify Output
+
+      - name: Verify output
         run: |
           ls -lh libautosync_plugin.dll
           file libautosync_plugin.dll
 
-      - name: Upload Windows Artifact
+      - name: Upload DLL artifact
         uses: actions/upload-artifact@v4
         with:
           name: libautosync_plugin-windows-${{ github.sha }}
           path: libautosync_plugin.dll
           retention-days: 30
+
+      - name: Create GitHub release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: libautosync_plugin.dll
+          generate_release_notes: true
+          body: |
+            ## Installation
+
+            1. Copy `libautosync_plugin.dll` into your VLC plugins folder:
+               `C:\Program Files\VideoLAN\VLC\plugins\video_filter\`
+            2. Make sure `ffmpeg.exe` is on your system PATH.
+               Download from https://www.gyan.dev/ffmpeg/builds/ (get the essentials build).
+            3. Restart VLC.
+            4. Enable the plugin: Tools → Preferences → Video → Subtitles/OSD → Sub filters → type `autosync_sub`
+            5. Enable the audio tap: Tools → Preferences → Audio → Filters → type `autosync_audio`
+
+            Sync happens automatically within a few seconds of opening any video.
